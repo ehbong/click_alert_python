@@ -21,6 +21,7 @@ class KeyReminderApp:
         self.delay_time = 0
         self.is_running = False
         self.monitor_thread = None
+        self.keyboard_handler = None  # 키보드 핸들러 추적을 위한 변수 추가
         
         self.load_config()
         self.create_gui()
@@ -57,7 +58,7 @@ class KeyReminderApp:
         self.status_label = ttk.Label(self.root, text="대기 중")
         self.status_label.pack(padx=10, pady=5)
         
-        # 저장된 ��가 있으면 표시
+        # 저장된 키가 있으면 표시
         if self.target_key:
             self.key_entry.config(state='normal')
             self.key_entry.delete(0, tk.END)
@@ -113,19 +114,42 @@ class KeyReminderApp:
                 self.delay_time = 0
     
     def key_monitor(self):
-        def on_key_event():
-            winsound.Beep(2500, 300)
+        def on_key_event(e):  # 이벤트 파라미터 추가
+            # 키가 눌렸을 때 바로 소리 재생
+            winsound.Beep(1000, 200)  # 1000Hz, 200ms (더 낮은 음과 짧은 시간)
+            # 지정된 시간 후에 다른 소리 재생
+            threading.Timer(self.delay_time, lambda: winsound.Beep(2500, 300)).start()
         
-        keyboard.on_press_key(self.target_key, lambda _: threading.Timer(self.delay_time, on_key_event).start())
-        
-        while self.is_running:
-            time.sleep(1)
+        try:
+            # 이전 핸들러가 있다면 제거
+            if self.keyboard_handler:
+                keyboard.unhook_key(self.target_key)
+                self.keyboard_handler = None
+            
+            # 새로운 핸들러 등록 및 저장
+            self.keyboard_handler = on_key_event  # 직접 이벤트 핸들러 함수 사용
+            keyboard.on_press_key(self.target_key, self.keyboard_handler)
+            
+            while self.is_running:
+                time.sleep(1)
+                
+        except Exception as e:
+            print(f"키 모니터링 중 오류 발생: {e}")
+            self.status_label.config(text="모니터링 오류")
     
     def start_monitoring(self):
+        # 이전 모니터링 중지
         if self.monitor_thread is not None:
             self.is_running = False
+            if self.keyboard_handler:
+                keyboard.unhook_key(self.target_key)
+                self.keyboard_handler = None  # 핸들러 초기화
             self.monitor_thread.join()
         
+        # 약간의 지연 추가
+        time.sleep(0.1)
+        
+        # 새로운 모니터링 시작
         self.is_running = True
         self.monitor_thread = threading.Thread(target=self.key_monitor)
         self.monitor_thread.daemon = True
