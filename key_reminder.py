@@ -11,7 +11,7 @@ class KeyReminderApp:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("키 알리미")
-        self.root.geometry("300x200")
+        self.root.geometry("300x300")
         
         # 설정 저장 파일 경로
         self.config_file = "key_reminder_config.json"
@@ -22,6 +22,8 @@ class KeyReminderApp:
         self.is_running = False
         self.monitor_thread = None
         self.keyboard_handler = None  # 키보드 핸들러 추적을 위한 변수 추가
+        self.current_immediate_sound = True  # 현재 적용된 설정 저장
+        self.immediate_sound = tk.BooleanVar(value=True)  # GUI 표시용 설정
         
         self.load_config()
         self.create_gui()
@@ -50,8 +52,19 @@ class KeyReminderApp:
         self.time_entry.insert(0, str(self.delay_time))
         self.time_entry.pack(padx=5, pady=5, fill="x")
         
+        # 즉시 알림음 설정 체크박스 추가
+        sound_frame = ttk.LabelFrame(self.root, text="알림음 설정")
+        sound_frame.pack(padx=10, pady=5, fill="x")
+        
+        self.sound_check = ttk.Checkbutton(
+            sound_frame, 
+            text="키 입력 시 알림음",
+            variable=self.immediate_sound
+        )
+        self.sound_check.pack(padx=5, pady=5)
+        
         # 저장 버튼
-        save_button = ttk.Button(self.root, text="설정 저장", command=self.save_settings)
+        save_button = ttk.Button(self.root, text="설정 적용 및 저장", command=self.save_settings)
         save_button.pack(padx=10, pady=5)
         
         # 상태 표시 레이블
@@ -87,9 +100,13 @@ class KeyReminderApp:
     def save_settings(self):
         try:
             self.delay_time = float(self.time_entry.get())
+            # 현재 설정 업데이트
+            self.current_immediate_sound = self.immediate_sound.get()
+            
             config = {
                 "target_key": self.target_key,
-                "delay_time": self.delay_time
+                "delay_time": self.delay_time,
+                "immediate_sound": self.current_immediate_sound
             }
             
             with open(self.config_file, 'w') as f:
@@ -106,18 +123,23 @@ class KeyReminderApp:
             try:
                 with open(self.config_file, 'r') as f:
                     config = json.load(f)
-                    self.target_key = config.get("target_key", "").lower()  # 소문자로 변환
+                    self.target_key = config.get("target_key", "").lower()
                     self.delay_time = config.get("delay_time", 0)
+                    # 두 설정 모두 업데이트
+                    self.current_immediate_sound = config.get("immediate_sound", True)
+                    self.immediate_sound.set(self.current_immediate_sound)
             except Exception as e:
                 print(f"설정 파일 로드 중 오류: {e}")
                 self.target_key = ""
                 self.delay_time = 0
+                self.current_immediate_sound = True
+                self.immediate_sound.set(True)
     
     def key_monitor(self):
-        def on_key_event(e):  # 이벤트 파라미터 추가
-            # 키가 눌렸을 때 바로 소리 재생
-            winsound.Beep(1000, 200)  # 1000Hz, 200ms (더 낮은 음과 짧은 시간)
-            # 지정된 시간 후에 다른 소리 재생
+        def on_key_event(e):
+            # 저장된 설정값 사용
+            if self.current_immediate_sound:
+                winsound.Beep(1000, 200)
             threading.Timer(self.delay_time, lambda: winsound.Beep(2500, 300)).start()
         
         try:
